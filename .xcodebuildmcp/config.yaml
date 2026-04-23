@@ -1,0 +1,22 @@
+schemaVersion: 1
+
+# Load simulator + UI automation + logging tools.
+# UI automation provides tap/swipe/type/describe_ui for automated flow
+# testing of paywall, onboarding, and other multi-step UI.
+enabledWorkflows:
+  - simulator
+  - ui-automation
+  - logging
+
+# Keep session defaults enabled so we can set project/scheme/simulator once.
+disableSessionDefaults: false
+
+# Project-level defaults so tools pick the right scheme without explicit args.
+sessionDefaults:
+  projectPath: "./Roleo.xcodeproj"
+  scheme: "Roleo"
+  configuration: "Debug"
+  simulatorName: "iPhone 17 Pro"
+  platform: "iOS Simulator"
+  useLatestOS: true
+  bundleId: "vl.Roleo"
