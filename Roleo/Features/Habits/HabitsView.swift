@@ -5,6 +5,9 @@ struct HabitsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Query(sort: \Habit.sortOrder) private var habits: [Habit]
+
+    var isActive = true
+
     @State private var viewModel = HabitsViewModel()
     @State private var showingAddHabit = false
     @State private var editingHabit: Habit?
@@ -12,6 +15,7 @@ struct HabitsView: View {
     @State private var showingDeleteDialog = false
     @State private var newHabitSparkleTick = 0
     @State private var newHabitRowID: UUID?
+    @State private var newHabitCelebration: NewHabitCelebration?
     @State private var appeared = false
 
     private let requiredActive = 4
@@ -54,15 +58,28 @@ struct HabitsView: View {
                     )
             }
         }
-        .onAppear {
-            if !appeared {
-                // Tiny delay lets the List render before we flip the flag,
-                // so the staggered spring reads cleanly instead of popping.
-                Task { @MainActor in
-                    try? await Task.sleep(for: .milliseconds(60))
-                    withAnimation { appeared = true }
-                }
+        .overlay(alignment: .bottomTrailing) {
+            if let newHabitCelebration, isActive, !showingAddHabit, !showingDeleteDialog {
+                newHabitMascotCelebration(newHabitCelebration)
+                    .padding(.horizontal, 18)
+                    .padding(.bottom, 22)
+                    .transition(
+                        .asymmetric(
+                            insertion: .move(edge: .trailing)
+                                .combined(with: .scale(scale: 0.82, anchor: .bottomTrailing))
+                                .combined(with: .opacity),
+                            removal: .move(edge: .bottom)
+                                .combined(with: .opacity)
+                        )
+                    )
+                    .allowsHitTesting(false)
             }
+        }
+        .onAppear {
+            revealRowsIfNeeded()
+        }
+        .onChange(of: isActive) { _, _ in
+            revealRowsIfNeeded()
         }
     }
 
@@ -142,7 +159,7 @@ struct HabitsView: View {
 
     private var emptyState: some View {
         VStack(spacing: 20) {
-            RoleoMascot(expression: .curious, size: 140)
+            RoleoMascot(expression: .curious, size: 140, active: isActive)
 
             VStack(spacing: 8) {
                 Text(AppCopy.Empty.habitsTitle)
@@ -188,11 +205,13 @@ struct HabitsView: View {
             : Color(hex: AppConstants.Colors.primaryOrange)
 
         return HStack(spacing: 12) {
-            Image(systemName: isReadyToSpin ? "sparkles" : "dial.medium")
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(accent)
-                .symbolEffect(.bounce, value: isReadyToSpin)
-                .frame(width: 22)
+            RoleoMascot(
+                expression: isReadyToSpin ? .excited : .curious,
+                size: 42,
+                breathing: !reduceMotion,
+                active: isActive
+            )
+            .frame(width: 44, height: 44)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(isReadyToSpin
@@ -396,7 +415,7 @@ struct HabitsView: View {
                 .onTapGesture { dismissDeleteConfirm() }
 
             VStack(spacing: 18) {
-                RoleoMascot(expression: .thinking, size: 72, breathing: !reduceMotion)
+                RoleoMascot(expression: .thinking, size: 72, breathing: !reduceMotion, active: isActive)
 
                 VStack(spacing: 8) {
                     Text(AppCopy.Habits.deleteTitle)
@@ -468,6 +487,15 @@ struct HabitsView: View {
         Color(red: 0.78, green: 0.31, blue: 0.27)
     }
 
+    private func newHabitMascotCelebration(_ celebration: NewHabitCelebration) -> some View {
+        NewHabitMascotCelebrationView(
+            habitName: celebration.name,
+            habitColor: Color(hex: celebration.colorHex),
+            trigger: celebration.trigger,
+            active: isActive
+        )
+    }
+
     private func confirmDelete() {
         let habit = habitPendingDelete
         withAnimation(.spring(response: 0.42, dampingFraction: 0.82)) {
@@ -484,6 +512,17 @@ struct HabitsView: View {
             showingDeleteDialog = false
         }
         habitPendingDelete = nil
+    }
+
+    private func revealRowsIfNeeded() {
+        guard isActive, !appeared else { return }
+        // Tiny delay lets the List render before we flip the flag,
+        // so the staggered spring reads cleanly instead of popping.
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(60))
+            guard isActive, !appeared else { return }
+            withAnimation { appeared = true }
+        }
     }
 
     // MARK: - Actions
@@ -507,11 +546,28 @@ struct HabitsView: View {
 
         newHabitRowID = newHabit.id
         newHabitSparkleTick += 1
+        let celebration = NewHabitCelebration(
+            id: newHabit.id,
+            name: newHabit.name,
+            colorHex: newHabit.colorHex,
+            trigger: newHabitSparkleTick
+        )
+
+        withAnimation(.spring(response: 0.54, dampingFraction: 0.74)) {
+            newHabitCelebration = celebration
+        }
 
         Task { @MainActor in
-            try? await Task.sleep(for: .seconds(1.2))
+            try? await Task.sleep(for: .seconds(1.6))
             if newHabitRowID == newHabit.id {
                 newHabitRowID = nil
+            }
+
+            try? await Task.sleep(for: .seconds(1.1))
+            if newHabitCelebration?.id == celebration.id {
+                withAnimation(.easeInOut(duration: 0.28)) {
+                    newHabitCelebration = nil
+                }
             }
         }
     }
@@ -523,7 +579,114 @@ struct HabitsView: View {
     }
 }
 
+private struct NewHabitCelebration: Identifiable, Equatable {
+    let id: UUID
+    let name: String
+    let colorHex: String
+    let trigger: Int
+}
+
+private struct NewHabitMascotCelebrationView: View {
+    let habitName: String
+    let habitColor: Color
+    let trigger: Int
+    let active: Bool
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var appeared = false
+    @State private var floatUp = false
+    @State private var sparkleTrigger = 0
+
+    var body: some View {
+        HStack(alignment: .bottom, spacing: 0) {
+            ZStack {
+                RoleoMascot(
+                    expression: .cheering,
+                    size: 86,
+                    active: active
+                )
+                .scaleEffect(appeared ? 1 : 0.62)
+                .rotationEffect(.degrees(appeared && !reduceMotion ? -4 : 0))
+                .offset(y: floatUp && !reduceMotion ? -5 : 0)
+                .animation(.spring(response: 0.5, dampingFraction: 0.58), value: appeared)
+                .animation(
+                    reduceMotion
+                        ? .easeOut(duration: 0.2)
+                        : .easeInOut(duration: 1.1).repeatForever(autoreverses: true),
+                    value: floatUp
+                )
+
+                SparkleBurst(
+                    trigger: sparkleTrigger,
+                    palette: [
+                        habitColor,
+                        Color(hex: AppConstants.Colors.goldBright),
+                        Color(hex: AppConstants.Colors.primaryOrange)
+                    ],
+                    particleCount: 10,
+                    duration: 0.8
+                )
+                .frame(width: 112, height: 112)
+            }
+            .frame(width: 88, height: 94)
+            .zIndex(1)
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text("ROLEO CHEERS")
+                    .font(.system(.caption2, design: .rounded).weight(.black))
+                    .tracking(1.2)
+                    .foregroundStyle(habitColor)
+
+                Text("\"\(habitName)\" joined the ritual.")
+                    .font(.system(.subheadline, design: .rounded).weight(.bold))
+                    .foregroundStyle(Color(hex: AppConstants.Colors.textPrimary))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.78)
+
+                Text("Tiny step. Real momentum.")
+                    .font(.system(.caption, design: .rounded).weight(.semibold))
+                    .foregroundStyle(Color(hex: AppConstants.Colors.textSecondary))
+            }
+            .padding(.leading, 28)
+            .padding(.trailing, 15)
+            .padding(.vertical, 13)
+            .frame(maxWidth: 260, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color(hex: AppConstants.Colors.cardSurface),
+                                habitColor.opacity(0.12)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(habitColor.opacity(0.20), lineWidth: 1)
+            )
+            .shadow(color: habitColor.opacity(0.18), radius: 18, x: 0, y: 10)
+            .offset(x: -18, y: -4)
+        }
+        .scaleEffect(appeared ? 1 : 0.9, anchor: .bottomTrailing)
+        .opacity(appeared ? 1 : 0)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Roleo cheers. \(habitName) joined the ritual. Tiny step. Real momentum.")
+        .onAppear {
+            withAnimation(.spring(response: 0.52, dampingFraction: 0.72)) {
+                appeared = true
+            }
+            sparkleTrigger = trigger
+            guard !reduceMotion else { return }
+            floatUp = true
+        }
+    }
+}
+
 #Preview {
     HabitsView()
-        .modelContainer(for: [Habit.self, SpinResult.self], inMemory: true)
+        .modelContainer(for: [Habit.self, SpinResult.self, FreezeDay.self], inMemory: true)
 }

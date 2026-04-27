@@ -13,27 +13,25 @@ enum PurchaseOutcome: Equatable {
 /// Wraps all StoreKit 2 access for Roleo.
 ///
 /// Behavior:
-/// - `loadProducts()` fetches the two subscriptions declared in `AppConstants.Store`.
+/// - `loadProducts()` fetches the lifetime unlock declared in `AppConstants.Store`.
 ///   In DEBUG with the `Roleo.storekit` configuration attached to the Run scheme,
 ///   these resolve locally (no Apple Developer account required).
 /// - `listenForTransactions()` starts an unstructured task that drains
 ///   `Transaction.updates` for the app lifetime and re-runs `checkEntitlements()`
-///   so the UI reflects external changes (subscribe outside the app, refund,
+///   so the UI reflects external changes (purchase outside the app, refund,
 ///   family sharing update, etc.).
-/// - `checkEntitlements()` walks `Transaction.currentEntitlements` and keeps the
-///   most recent active subscription as `activeProduct`. `isSubscribed` is true
-///   iff any entitlement in our product catalog is currently active.
+/// - `checkEntitlements()` walks `Transaction.currentEntitlements` and unlocks
+///   the app iff the lifetime non-consumable entitlement is currently active.
 /// - `isInTrial` is an **app-level** 3-day grace window (so new users don't hit
-///   the paywall immediately). It is NOT the StoreKit introductory offer — that
-///   one only applies when the user actually taps buy. Trial start is persisted
-///   in UserDefaults so it survives relaunches.
+///   the paywall immediately). Trial start is persisted in UserDefaults so it
+///   survives relaunches.
 @Observable
 @MainActor
 final class StoreService {
     // MARK: - Observable state
 
     var products: [Product] = []
-    var isSubscribed = false
+    var isUnlocked = false
     var activeProduct: Product?
     var purchaseError: String?
     var isLoading = false
@@ -77,12 +75,12 @@ final class StoreService {
         return Int(ceil(remainingSeconds / 86_400))
     }
 
-    var monthlyProduct: Product? {
-        products.first { $0.id == AppConstants.Store.monthlyProductID }
+    var isSubscribed: Bool {
+        isUnlocked
     }
 
-    var annualProduct: Product? {
-        products.first { $0.id == AppConstants.Store.annualProductID }
+    var lifetimeProduct: Product? {
+        products.first { $0.id == AppConstants.Store.lifetimeProductID }
     }
 
     // MARK: - Public API
@@ -99,10 +97,7 @@ final class StoreService {
             #if DEBUG
             print("[StoreService] loadProducts received \(fetched.count) products: \(fetched.map(\.id))")
             #endif
-            // Stable ordering: monthly first, annual second.
-            products = fetched.sorted { lhs, rhs in
-                orderIndex(for: lhs.id) < orderIndex(for: rhs.id)
-            }
+            products = fetched
         } catch {
             #if DEBUG
             print("[StoreService] loadProducts ERROR: \(error)")
@@ -146,10 +141,8 @@ final class StoreService {
             guard let transaction = try? checkVerified(verification) else { continue }
             guard AppConstants.Store.allProductIDs.contains(transaction.productID) else { continue }
 
-            // Treat as active if still within the current service period (for
-            // subscriptions the OS marks entitlements this way automatically —
-            // `currentEntitlements` only yields valid ones — but we double-check
-            // `revocationDate`).
+            // `currentEntitlements` only yields currently valid transactions,
+            // but still ignore revoked lifetime purchases.
             if transaction.revocationDate != nil { continue }
 
             let product = products.first { $0.id == transaction.productID }
@@ -167,10 +160,10 @@ final class StoreService {
 
         if let (product, _) = foundActive {
             activeProduct = product
-            isSubscribed = true
+            isUnlocked = true
         } else {
             activeProduct = nil
-            isSubscribed = false
+            isUnlocked = false
         }
     }
 
@@ -200,14 +193,6 @@ final class StoreService {
     }
 
     // MARK: - Helpers
-
-    private func orderIndex(for id: String) -> Int {
-        switch id {
-        case AppConstants.Store.monthlyProductID: return 0
-        case AppConstants.Store.annualProductID:  return 1
-        default: return 99
-        }
-    }
 
     private func checkVerified<T>(_ result: VerificationResult<T>) throws -> T {
         switch result {

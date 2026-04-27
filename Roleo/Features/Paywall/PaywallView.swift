@@ -5,9 +5,9 @@ import StoreKit
 ///
 /// Presented in two ways:
 /// 1. **Hard gate** — from `ContentView.paywallBinding` once the local 3-day
-///    trial has expired and the user is not subscribed. `onClose` is `nil`, so
+///    trial has expired and the lifetime unlock is not active. `onClose` is `nil`, so
 ///    the close button is hidden. The sheet will self-dismiss automatically
-///    when `StoreService.isSubscribed` flips to `true` (the binding's getter
+///    when `StoreService.isUnlocked` flips to `true` (the binding's getter
 ///    returns `false`).
 /// 2. **From Settings** — presented as a sheet with `onClose` wired to
 ///    `dismiss()` so the user can back out.
@@ -24,7 +24,6 @@ struct PaywallView: View {
     /// hard gate (no close button).
     var onClose: (() -> Void)? = nil
 
-    @State private var selectedProductID: String = AppConstants.Store.annualProductID
     @State private var isPurchasing = false
     @State private var errorMessage: String?
     @State private var animateBenefits = false
@@ -249,148 +248,69 @@ struct PaywallView: View {
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity, minHeight: 80)
             } else {
-                if let annual = storeService.annualProduct {
-                    planCard(
-                        product: annual,
-                        periodLabel: "per year",
-                        perUnitLabel: perMonthLabel(for: annual),
-                        savingsBadge: savingsBadge()
-                    )
-                }
-                if let monthly = storeService.monthlyProduct {
-                    planCard(
-                        product: monthly,
-                        periodLabel: "per month",
-                        perUnitLabel: nil,
-                        savingsBadge: nil
-                    )
+                if let product = storeService.lifetimeProduct {
+                    lifetimeCard(product: product)
                 }
             }
         }
     }
 
-    private func planCard(product: Product,
-                          periodLabel: String,
-                          perUnitLabel: String?,
-                          savingsBadge: String?) -> some View {
-        let isSelected = product.id == selectedProductID
+    private func lifetimeCard(product: Product) -> some View {
         let accent = Color(hex: AppConstants.Colors.primaryOrange)
 
-        return Button {
-            selectedProductID = product.id
-        } label: {
-            HStack(alignment: .center, spacing: 14) {
-                ZStack {
-                    Circle()
-                        .strokeBorder(
-                            isSelected ? accent : Color(hex: AppConstants.Colors.textPrimary).opacity(0.18),
-                            lineWidth: 2
-                        )
-                        .background(
-                            Circle().fill(isSelected ? accent : .clear)
-                        )
-                        .frame(width: 22, height: 22)
-                    if isSelected {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(.white)
-                    }
-                }
-
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
-                        Text(planDisplayName(for: product))
-                            .font(.system(.body, design: .rounded).weight(.bold))
-                            .foregroundStyle(Color(hex: AppConstants.Colors.textPrimary))
-                        if let savingsBadge {
-                            Text(savingsBadge)
-                                .font(.system(.caption2, design: .rounded).weight(.heavy))
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 7)
-                                .padding(.vertical, 3)
-                                .background(
-                                    Capsule().fill(Color(hex: AppConstants.Colors.successGreen))
-                                )
-                        }
-                    }
-                    if let perUnitLabel {
-                        Text(perUnitLabel)
-                            .font(.system(.footnote, design: .rounded))
-                            .foregroundStyle(Color(hex: AppConstants.Colors.textSecondary))
-                    }
-                }
-
-                Spacer(minLength: 0)
-
-                VStack(alignment: .trailing, spacing: 0) {
-                    Text(product.displayPrice)
-                        .font(.system(.title3, design: .rounded).weight(.heavy))
-                        .foregroundStyle(Color(hex: AppConstants.Colors.textPrimary))
-                    Text(periodLabel)
-                        .font(.system(.caption2, design: .rounded))
-                        .foregroundStyle(Color(hex: AppConstants.Colors.textSecondary))
-                }
+        return HStack(alignment: .center, spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(accent)
+                    .frame(width: 34, height: 34)
+                Image(systemName: "checkmark")
+                    .font(.system(size: 14, weight: .black))
+                    .foregroundStyle(.white)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 16)
-            .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(Color(hex: AppConstants.Colors.cardSurface))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .strokeBorder(
-                        isSelected ? accent : Color(hex: AppConstants.Colors.textPrimary).opacity(0.06),
-                        lineWidth: isSelected ? 2 : 1
-                    )
-            )
-            .shadow(
-                color: isSelected
-                    ? accent.opacity(0.18)
-                    : Color(hex: "#C8873A").opacity(0.06),
-                radius: isSelected ? 12 : 4,
-                x: 0,
-                y: isSelected ? 6 : 2
-            )
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text("Lifetime unlock")
+                        .font(.system(.body, design: .rounded).weight(.bold))
+                        .foregroundStyle(Color(hex: AppConstants.Colors.textPrimary))
+                    Text("ONE-TIME")
+                        .font(.system(.caption2, design: .rounded).weight(.heavy))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(
+                            Capsule().fill(Color(hex: AppConstants.Colors.successGreen))
+                        )
+                }
+
+                Text("Pay once. Keep your ritual forever.")
+                    .font(.system(.footnote, design: .rounded))
+                    .foregroundStyle(Color(hex: AppConstants.Colors.textSecondary))
+            }
+
+            Spacer(minLength: 0)
+
+            VStack(alignment: .trailing, spacing: 0) {
+                Text(product.displayPrice)
+                    .font(.system(.title3, design: .rounded).weight(.heavy))
+                    .foregroundStyle(Color(hex: AppConstants.Colors.textPrimary))
+                Text("forever")
+                    .font(.system(.caption2, design: .rounded))
+                    .foregroundStyle(Color(hex: AppConstants.Colors.textSecondary))
+            }
         }
-        .buttonStyle(.pressable(scale: 0.98, haptic: false))
-        .sensoryFeedback(.selection, trigger: isSelected)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 16)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color(hex: AppConstants.Colors.cardSurface))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(accent.opacity(0.55), lineWidth: 2)
+        )
+        .shadow(color: accent.opacity(0.18), radius: 12, x: 0, y: 6)
         .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
-    }
-
-    private func planDisplayName(for product: Product) -> String {
-        switch product.id {
-        case AppConstants.Store.annualProductID:  return "Annual"
-        case AppConstants.Store.monthlyProductID: return "Monthly"
-        default: return product.displayName
-        }
-    }
-
-    private func perMonthLabel(for annual: Product) -> String? {
-        let perMonthDecimal = annual.price / 12
-        let format = annual.priceFormatStyle
-        let rounded = NSDecimalNumber(decimal: perMonthDecimal)
-            .rounding(accordingToBehavior: NSDecimalNumberHandler(
-                roundingMode: .plain,
-                scale: 2,
-                raiseOnExactness: false,
-                raiseOnOverflow: false,
-                raiseOnUnderflow: false,
-                raiseOnDivideByZero: false
-            )).decimalValue
-        return "\(rounded.formatted(format)) / month"
-    }
-
-    private func savingsBadge() -> String? {
-        guard let monthly = storeService.monthlyProduct,
-              let annual = storeService.annualProduct else { return nil }
-        let twelveMonths = monthly.price * 12
-        guard twelveMonths > 0 else { return nil }
-        let savings = (twelveMonths - annual.price) / twelveMonths
-        let percent = (NSDecimalNumber(decimal: savings).doubleValue * 100).rounded()
-        guard percent > 0 else { return nil }
-        return "SAVE \(Int(percent))%"
     }
 
     // MARK: - Footer (CTA + fine print + legal)
@@ -420,9 +340,7 @@ struct PaywallView: View {
                 )
             }
             .buttonStyle(.pressable)
-            .disabled(!loadFailed && (storeService.monthlyProduct == nil
-                      || storeService.annualProduct == nil
-                      || isPurchasing))
+            .disabled(!loadFailed && (storeService.lifetimeProduct == nil || isPurchasing))
 
             Text(finePrint)
                 .font(.system(.caption2, design: .rounded))
@@ -463,22 +381,17 @@ struct PaywallView: View {
 
     private var ctaTitle: String {
         if loadFailed { return "Retry" }
-        if storeService.monthlyProduct == nil && storeService.annualProduct == nil {
+        if storeService.lifetimeProduct == nil {
             return "Loading..."
         }
-        return "Start 3-Day Free Trial"
+        return "Unlock Forever"
     }
 
     private var finePrint: String {
-        guard let selected = selectedProduct else {
-            return "3 days free, then billed on a recurring basis. Cancel anytime."
+        guard let product = storeService.lifetimeProduct else {
+            return "Try Roleo free for 3 days. Unlock once when you're ready."
         }
-        let period = selected.id == AppConstants.Store.annualProductID ? "year" : "month"
-        return "3 days free, then \(selected.displayPrice) per \(period). Cancel anytime in Settings."
-    }
-
-    private var selectedProduct: Product? {
-        storeService.products.first { $0.id == selectedProductID }
+        return "3 days free, then \(product.displayPrice) once. No subscription."
     }
 
     @ViewBuilder
@@ -501,7 +414,7 @@ struct PaywallView: View {
             }
             return
         }
-        guard let product = selectedProduct else { return }
+        guard let product = storeService.lifetimeProduct else { return }
         isPurchasing = true
         Task {
             let outcome = await storeService.purchase(product)
@@ -509,7 +422,7 @@ struct PaywallView: View {
             switch outcome {
             case .success:
                 // PaywallView will auto-dismiss via ContentView's binding
-                // (isSubscribed == true). If manually presented, trigger close.
+                // (isUnlocked == true). If manually presented, trigger close.
                 onClose?()
             case .userCancelled:
                 break

@@ -2,9 +2,8 @@ import Foundation
 
 enum AppConstants {
     enum Store {
-        static let monthlyProductID = "com.seunome.roleo.premium.monthly"
-        static let annualProductID = "com.seunome.roleo.premium.annual"
-        static let allProductIDs = [monthlyProductID, annualProductID]
+        static let lifetimeProductID = "com.seunome.roleo.premium.lifetime"
+        static let allProductIDs = [lifetimeProductID]
     }
 
     enum AppGroup {

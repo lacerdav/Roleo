@@ -4,12 +4,16 @@ import SwiftData
 struct HistoryView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \SpinResult.date, order: .reverse) private var results: [SpinResult]
+    @Query(sort: \FreezeDay.date, order: .reverse) private var freezeDays: [FreezeDay]
+
+    var isActive = true
+
     @State private var viewModel = HistoryViewModel()
     @State private var animateStats = false
     @State private var animateXPBar = false
 
     private var stats: UserStats {
-        viewModel.calculateStats(from: results)
+        viewModel.calculateStats(from: results, freezeDays: freezeDays)
     }
 
     private var progression: XPProgressionState {
@@ -35,6 +39,10 @@ struct HistoryView: View {
         }
     }
 
+    private var recentFreeze: FreezeDay? {
+        freezeDays.first
+    }
+
     private let last30Window = 30
 
     var body: some View {
@@ -46,8 +54,12 @@ struct HistoryView: View {
             }
         }
         .warmBackground()
-        .onAppear(perform: triggerAppearance)
+        .onAppear(perform: triggerAppearanceIfActive)
+        .onChange(of: isActive) { _, _ in
+            triggerAppearanceIfActive()
+        }
         .onChange(of: results.count) { _, _ in
+            guard isActive else { return }
             // Re-run the appearance animation any time the XP source changes.
             animateXPBar = false
             withAnimation(.easeOut(duration: 0.7)) {
@@ -63,7 +75,7 @@ struct HistoryView: View {
             header
 
             VStack(spacing: 20) {
-                RoleoMascot(expression: .happy, size: 140)
+                RoleoMascot(expression: .happy, size: 140, active: isActive)
 
                 VStack(spacing: 8) {
                     Text(AppCopy.Empty.historyTitle)
@@ -114,7 +126,7 @@ struct HistoryView: View {
                             .accessibilityLabel("\(last30Completed) of \(last30Window) days completed")
                     }
 
-                    CalendarGridView(results: results)
+                    CalendarGridView(results: results, freezeDays: freezeDays, isActive: isActive)
                         .padding(16)
                         .warmCard(radius: 20, level: 1)
                 }
@@ -129,29 +141,103 @@ struct HistoryView: View {
     }
 
     private var progressReflection: some View {
-        Text(AppCopy.Empty.historyProgressReflection(
+        let message = AppCopy.Empty.historyProgressReflection(
             streak: stats.currentStreak,
             completed: stats.totalCompleted
-        ))
-        .font(.system(.subheadline, design: .rounded).weight(.semibold))
-        .foregroundStyle(Color(hex: AppConstants.Colors.textSecondary))
-        .multilineTextAlignment(.leading)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        )
+        let accent = reflectionAccent
+
+        return HStack(alignment: .center, spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                accent.opacity(0.95),
+                                Color(hex: AppConstants.Colors.goldBright).opacity(0.85)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .shadow(color: accent.opacity(0.30), radius: 12, x: 0, y: 6)
+
+                RoleoMascot(
+                    expression: reflectionExpression,
+                    size: 52,
+                    active: isActive
+                )
+            }
+            .frame(width: 54, height: 54)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(reflectionEyebrow)
+                    .font(.system(.caption2, design: .rounded).weight(.black))
+                    .tracking(1.2)
+                    .foregroundStyle(accent)
+
+                Text(message)
+                    .font(.system(.subheadline, design: .rounded).weight(.bold))
+                    .foregroundStyle(Color(hex: AppConstants.Colors.textPrimary))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color(hex: AppConstants.Colors.primarySoft).opacity(0.72))
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(hex: AppConstants.Colors.goldSoft),
+                            Color(hex: AppConstants.Colors.primarySoft)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
         )
+        .overlay(alignment: .topTrailing) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 17, weight: .bold))
+                .foregroundStyle(Color(hex: AppConstants.Colors.gold))
+                .padding(.top, 12)
+                .padding(.trailing, 14)
+                .opacity(0.75)
+                .symbolEffect(.pulse, value: animateStats)
+        }
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(Color(hex: AppConstants.Colors.primaryOrange).opacity(0.14), lineWidth: 1)
+                .stroke(accent.opacity(0.24), lineWidth: 1)
         )
+        .shadow(color: accent.opacity(0.12), radius: 16, x: 0, y: 8)
+        .scaleEffect(animateStats ? 1 : 0.97)
+        .opacity(animateStats ? 1 : 0)
+        .offset(y: animateStats ? 0 : 10)
+        .animation(.spring(response: 0.45, dampingFraction: 0.78).delay(0.12), value: animateStats)
         .accessibilityLabel("Progress reflection")
-        .accessibilityValue(AppCopy.Empty.historyProgressReflection(
-            streak: stats.currentStreak,
-            completed: stats.totalCompleted
-        ))
+        .accessibilityValue("\(reflectionEyebrow). \(message)")
+    }
+
+    private var reflectionAccent: Color {
+        stats.currentStreak > 0
+            ? Color(hex: AppConstants.Colors.primaryOrange)
+            : Color(hex: AppConstants.Colors.secondaryTeal)
+    }
+
+    private var reflectionExpression: RoleoMascot.Expression {
+        if stats.currentStreak > 1 { return .cheering }
+        if stats.currentStreak == 1 { return .happy }
+        return stats.totalCompleted > 0 ? .thinking : .curious
+    }
+
+    private var reflectionEyebrow: String {
+        if stats.currentStreak > 1 { return "\(stats.currentStreak)-DAY STREAK" }
+        if stats.currentStreak == 1 { return "TODAY COUNTS" }
+        if recentFreeze != nil { return "STREAK SAVED" }
+        return stats.totalCompleted > 0 ? "READY WHEN YOU ARE" : "FIRST WIN WAITING"
     }
 
     // MARK: - Header
@@ -468,6 +554,11 @@ struct HistoryView: View {
 
     // MARK: - Appearance
 
+    private func triggerAppearanceIfActive() {
+        guard isActive else { return }
+        triggerAppearance()
+    }
+
     private func triggerAppearance() {
         animateStats = false
         animateXPBar = false
@@ -483,5 +574,5 @@ struct HistoryView: View {
 
 #Preview {
     HistoryView()
-        .modelContainer(for: [SpinResult.self, Habit.self], inMemory: true)
+        .modelContainer(for: [SpinResult.self, Habit.self, FreezeDay.self], inMemory: true)
 }

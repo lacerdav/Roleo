@@ -7,7 +7,7 @@ Last updated: April 2026
 
 ## Product overview
 
-Roleo is a premium iOS habit app ($4.99/month or $29.99/year, 3-day free trial, no free tier).
+Roleo is a premium iOS habit app ($4.99 one-time lifetime unlock, 3-day free trial, no free tier).
 Daily spin wheel mechanic: user creates habits → spins once per day → completes the selected habit → earns streak and XP.
 
 **Design theme:** Warm creamy light — bright, tactile, rounded, celebratory.
@@ -44,9 +44,10 @@ Open the OUTER Roleo/ folder in Cursor, not the inner one.
 | Apr 2026 | Warm teal replaces violet as secondary accent | Better harmony with cream, orange, and gold brand system |
 | Apr 2026 | Dark theme deferred to v1.1 | Ship light first, validate with users |
 | Apr 2026 | Paid-only, no free tier | Committed users, lower churn |
-| Apr 2026 | $4.99/month + $29.99/year | Internationally accessible, premium positioning |
+| Apr 2026 | $4.99 one-time lifetime unlock | Better fit for v1.0 scope and stronger conversion than recurring pricing |
 | Apr 2026 | Widget in v1.0 MVP | Key differentiator vs competitors |
 | Apr 2026 | App name: Roleo | Works in EN and PT-BR, memorable |
+| Apr 2026 | Once-per-day spin stays for v1.0 | Preserves the calm ritual identity and avoids turning Roleo into a scheduling app |
 
 ---
 
@@ -70,14 +71,16 @@ Open the OUTER Roleo/ folder in Cursor, not the inner one.
 | 14 | History refinement | ✅ Done |
 | 15 | Onboarding, paywall, settings polish | ✅ Done |
 | 16 | Accessibility + final QA | 🔲 Pending |
+| 17 | Lifetime unlock + retention value polish | ✅ Done |
 
-**Status note (April 2026):** All phases 1–9 are fully implemented. Phases 11–16 are
+**Status note (April 2026):** All phases 1–9 are fully implemented. Phases 11–17 are
 refinement passes.
 - Phase 11: fixed two black shadows (SpinView hint capsule, HabitsView delete overlay), replaced violet/purple confetti colors with warm-palette equivalents.
 - Phase 12: fixed black shadow on WheelView segment icons; added staggered spring entrance animations to SpinResultModalView (icon circle, habit name, toast text).
 - Phase 13: removed pulsing orangeGlow from readiness pill; HabitFormView default color changed to secondaryTeal; violet (premiumWarmPurple) replaced by secondaryTeal in colorOptions; icon picker unselected cells now use cardElevated background; checkmark overlay added to selected color circle.
 - Phase 14: CalendarGridView noSpin/future cell colors changed from Color.secondary to warm textPrimary tints; completed cells gain warm green shadow; staggered spring entrance animation added to all 35 cells.
 - Phase 15: OnboardingView notifications page mascot changed to .happy (ritual invitation, not hesitation); "Your ritual time" label added inside the DatePicker card. PaywallView premiumWarmPurple replaced with secondaryTeal in hero angular gradient; unselected plan card shadow fixed from black to warm amber. SettingsView "Expired" status renamed "Trial ended"; expired-state footer copy added.
+- Phase 17: monetization moved from subscription plans to a $4.99 one-time lifetime unlock; StoreKit config and paywall copy updated accordingly. Added one automatic streak freeze per calendar week, weekly digest local notification scheduling, freeze-aware streak calculation, and frozen-day history treatment.
 
 **Source of truth note:** If this roadmap and `CLAUDE.md` ever diverge on product rules,
 visual system, or technical constraints, treat `CLAUDE.md` as authoritative and update
@@ -293,7 +296,7 @@ History rows use WarmCard modifier with warm shadows.
 
 ## Phase 5 — SettingsView + Notifications
 
-**Goal:** Notification time picker + subscription status + app info.
+**Goal:** Notification time picker + access status + app info.
 
 ### Checklist
 - [ ] `NotificationService.swift` — complete:
@@ -304,7 +307,7 @@ History rows use WarmCard modifier with warm shadows.
 - [ ] `SettingsView.swift`:
   - List .insetGrouped on warm background
   - Section "Notifications": toggle + DatePicker when enabled
-  - Section "Subscription": status text + Restore Purchases button (orange)
+  - Section "Access": status text + Restore Purchases button (orange)
   - Section "App": version + Privacy Policy link
   - On appear: check UNUserNotificationCenter permission status
 
@@ -362,7 +365,7 @@ Completion pill: green "Done ✓" if completed, orange "Spin now →" if not.
 
 ## Phase 7 — Paywall + StoreKit 2
 
-**Goal:** Beautiful paywall that converts. Full StoreKit 2 subscription logic.
+**Goal:** Beautiful paywall that converts. Full StoreKit 2 lifetime-unlock logic.
 
 ### Checklist
 - [ ] `StoreService.swift` — complete @Observable @MainActor:
@@ -371,13 +374,13 @@ Completion pill: green "Done ✓" if completed, orange "Spin now →" if not.
   - `checkEntitlements()` — Transaction.currentEntitlements on launch
   - `restorePurchases()` — AppStore.sync()
   - `listenForTransactions()` — Task with AsyncStream from Transaction.updates
-  - `var isSubscribed: Bool`, `var isInTrial: Bool`
+  - `var isUnlocked: Bool`, `var isInTrial: Bool`
 - [ ] `PaywallView.swift` — full screen cover:
   - Warm background, large wheel icon/illustration at top
-  - "Roleo Premium" title + "3 days free, cancel anytime" caption
+  - "Roleo Premium" title + "3 days free, then unlock forever" caption
   - 3 benefit rows: icon square (warm teal tinted) + description
-  - 2 plan cards side by side (monthly + annual with "-50%" green badge)
-  - "Start Free Trial" CTA — orange #FF6B35 button, full width, 60pt
+  - 1 lifetime card: one-time purchase, warm premium treatment
+  - "Unlock Forever" CTA — orange #FF6B35 button, full width, 60pt
   - "Restore Purchases" + "Privacy Policy" footer links
 - [ ] ContentView gates: show PaywallView as .fullScreenCover when trial expired
 
@@ -389,8 +392,7 @@ Always call transaction.finish() after .success.
 Handle all PurchaseResult cases explicitly.
 
 PaywallView: warm light theme, orange CTA button #FF6B35.
-Annual plan card: selected by default, green "-50%" badge.
-Monthly plan: standard card, not selected by default.
+Present one clear lifetime unlock option.
 Benefits icons: warm teal tinted square chips #00A896.
 ```
 
@@ -448,7 +450,7 @@ ContentView shows OnboardingView .fullScreenCover when !hasCompletedOnboarding.
 - [ ] Apple Developer account active ($99/year)
 - [ ] Bundle ID `com.seunome.roleo` registered
 - [ ] Capabilities: Push Notifications, StoreKit, App Groups
-- [ ] Subscription products created in App Store Connect (sandbox first)
+- [ ] Non-consumable lifetime product created in App Store Connect (sandbox first)
 - [ ] RocketSim screenshots: all required sizes with device bezels
 - [ ] App preview video: shows spin animation (30s max)
 - [ ] App Store description EN (primary) + PT-BR (localized)
@@ -535,9 +537,9 @@ feel consistent with the core product quality.
 - [ ] Make onboarding page-to-page progression feel more distinct and emotionally clear
 - [ ] Refine the notification setup step so it feels like a ritual choice, not permission plumbing
 - [ ] Design a full premium `PaywallView` aligned with Roleo's visual identity
-- [ ] Ensure the paywall sells the product feeling, not only the subscription terms
+- [ ] Ensure the paywall sells the product feeling, not only the purchase terms
 - [ ] Keep `SettingsView` lighter and more native than feature screens
-- [ ] Refine settings sections for notifications, subscription, and app information
+- [ ] Refine settings sections for notifications, access, and app information
 - [ ] Review trust signals across onboarding, paywall, and settings copy/layout
 
 ---
@@ -559,17 +561,46 @@ ready for broad real-world use.
 
 ---
 
+## Phase 17 — Lifetime unlock + retention value polish
+
+**Goal:** Align the business model with v1.0 scope and add small retention features
+that increase perceived premium value without changing Roleo's once-a-day feel.
+
+### Checklist
+- [x] Replace monthly/annual subscription products with one non-consumable lifetime unlock
+- [x] Update `StoreService`, `PaywallView`, `SettingsView`, and local StoreKit config for the one-time purchase flow
+- [x] Preserve the existing 3-day local trial before the paywall appears
+- [x] Add `FreezeDay` SwiftData model and include it in all model containers and previews
+- [x] Auto-apply one streak freeze per calendar week when the user misses the previous day and is eligible
+- [x] Update streak calculation so frozen days preserve continuity but do not add completions or XP
+- [x] Add freeze state to History calendar and supportive UI copy
+- [x] Add weekly digest local notification scheduling for Sundays at 10:00 with dynamic copy buckets
+- [x] Reschedule daily reminder + weekly digest when the app becomes active
+- [x] Validate with a simulator build
+
+### Notes
+- Roleo remains strictly once per day for v1.0.
+- Widget work stays deferred outside this phase.
+- Premium-value ideas intentionally moved to v1.1 instead of bloating v1.0.
+
+---
+
 ## Post-launch roadmap
 
 ### v1.1 (60 days after launch)
-- Multiple wheels (morning / afternoon / evening)
+- Custom app icons
+- Habit frequency caps (for habits that should not appear every day)
+- Spin lock / intention lock once per week
+- Completion notes after marking a habit done
+- XP-based streak protection
+- Habit weights / probability tuning
 - Apple Watch app
 - Dark mode theme
 
 ### v1.2 (6 months)
 - Accountability partner / shared streaks
 - Weekly insights
-- Price increase to $5.99/month with Watch app justifying it
+- Optional upgrade pricing review only after new recurring-value features justify it
 
 ---
 
@@ -583,6 +614,8 @@ ready for broad real-world use.
   that must stay consistent across roadmap, implementation, and UX copy.
 - The phase status table may lag the actual codebase because later features already have
   partial implementations.
+- Historical roadmap references to subscriptions are obsolete; the current monetization
+  direction is a one-time lifetime unlock.
 
 ---
 
@@ -600,3 +633,4 @@ the table above. Confirm `CLAUDE.md` and `PLAN.md` are still aligned before star
 - Added a small History progress reflection to make completed spins feel more personal and motivating.
 - Improved accessibility labels for the Spin CTA and History rows/reflection.
 - Hardened `HabitsViewModel` SwiftData saves with rollback on failure instead of silent `try?` writes.
+- Switched monetization to a $4.99 lifetime unlock, added weekly streak freeze support, and added weekly digest notification scheduling.

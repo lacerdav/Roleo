@@ -7,6 +7,10 @@ struct SpinView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Query(sort: \Habit.sortOrder) private var habits: [Habit]
     @Query(sort: \SpinResult.date, order: .reverse) private var results: [SpinResult]
+    @Query(sort: \FreezeDay.date, order: .reverse) private var freezeDays: [FreezeDay]
+
+    var isActive = true
+
     @State private var viewModel = SpinViewModel()
 
     // Overlay state
@@ -42,11 +46,21 @@ struct SpinView: View {
         (viewModel.todayResult == nil || allowSpinReplayForTesting) && !viewModel.isSpinning
     }
 
+    private var shouldRunAmbientMotion: Bool {
+        isActive && !reduceMotion && !viewModel.isSpinning
+    }
+
     private var resultsStatsSignature: String {
         results
             .map { result in
                 "\(result.id.uuidString)|\(result.date.timeIntervalSinceReferenceDate)|\(result.isCompleted)"
             }
+            .joined(separator: ",")
+    }
+
+    private var freezeStatsSignature: String {
+        freezeDays
+            .map { "\($0.id.uuidString)|\($0.date.timeIntervalSinceReferenceDate)|\($0.weekIdentifier)" }
             .joined(separator: ",")
     }
 
@@ -141,11 +155,11 @@ struct SpinView: View {
         }
         .onAppear {
             viewModel.loadTodayResult(context: modelContext)
-            viewModel.updateDerivedStats(results: results)
+            viewModel.updateDerivedStats(results: results, freezeDays: freezeDays)
             updateWidgetStreak()
             lastPresentedResultID = viewModel.todayResult?.id
-            idleBreath = true
-            readyPulse = true
+            idleBreath = isActive
+            readyPulse = isActive
             if !headerAppeared {
                 Task { @MainActor in
                     try? await Task.sleep(for: .milliseconds(60))
@@ -155,12 +169,28 @@ struct SpinView: View {
                 }
             }
         }
+        .onChange(of: isActive) { _, active in
+            idleBreath = active
+            readyPulse = active
+        }
         .onChange(of: resultsStatsSignature) { _, _ in
             let oldStreak = viewModel.currentStreak
-            viewModel.updateDerivedStats(results: results)
+            viewModel.updateDerivedStats(results: results, freezeDays: freezeDays)
             updateWidgetStreak()
 
             // Celebrate streak growth with a brief badge bump.
+            if viewModel.currentStreak > oldStreak {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.55)) { streakBump = true }
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(420))
+                    withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) { streakBump = false }
+                }
+            }
+        }
+        .onChange(of: freezeStatsSignature) { _, _ in
+            let oldStreak = viewModel.currentStreak
+            viewModel.updateDerivedStats(results: results, freezeDays: freezeDays)
+            updateWidgetStreak()
             if viewModel.currentStreak > oldStreak {
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.55)) { streakBump = true }
                 Task { @MainActor in
@@ -282,14 +312,14 @@ struct SpinView: View {
                     .scaleEffect(idleBreath ? 1.04 : 1.0)
                     .allowsHitTesting(false)
                     .animation(
-                        reduceMotion || viewModel.isSpinning
-                            ? .default
-                            : .easeInOut(duration: 2.2).repeatForever(autoreverses: true),
+                        shouldRunAmbientMotion
+                            ? .easeInOut(duration: 2.2).repeatForever(autoreverses: true)
+                            : .easeOut(duration: 0.2),
                         value: idleBreath
                     )
 
                 // Ready-state pulse ring.
-                if canSpinNow && !reduceMotion {
+                if canSpinNow && shouldRunAmbientMotion {
                     Circle()
                         .stroke(
                             Color(hex: AppConstants.Colors.primaryOrange)
@@ -398,7 +428,7 @@ struct SpinView: View {
 
     private var notEnoughHabitsState: some View {
         VStack(spacing: 20) {
-            RoleoMascot(expression: .sleepy, size: 150)
+            RoleoMascot(expression: .sleepy, size: 150, active: isActive)
 
             VStack(spacing: 8) {
                 Text(AppCopy.Empty.spinNotEnoughTitle)
@@ -441,5 +471,5 @@ struct SpinView: View {
 
 #Preview {
     SpinView()
-        .modelContainer(for: [Habit.self, SpinResult.self], inMemory: true)
+        .modelContainer(for: [Habit.self, SpinResult.self, FreezeDay.self], inMemory: true)
 }

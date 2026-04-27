@@ -31,11 +31,10 @@ auto-applies on next app launch, saving the streak. Frozen days appear as ❄️
 history calendar. Every Sunday, a **weekly digest** notification celebrates the past
 week's completions with warm, human copy.
 
-**Monetization:** Paid-only subscription. No free tier. No feature gating.
+**Monetization:** Paid one-time lifetime unlock. No free tier. No feature gating.
 The app is fully usable during the 3-day free trial. After trial expiry, a paywall
-blocks access until the user subscribes.
-- Monthly: $4.99 USD — product ID `com.seunome.roleo.premium.monthly`
-- Annual: $29.99 USD — product ID `com.seunome.roleo.premium.annual`
+blocks access until the user purchases permanent access.
+- Lifetime: $4.99 USD — product ID `com.seunome.roleo.premium.lifetime`
 
 ---
 
@@ -122,7 +121,7 @@ Pattern is always: **Model → Service/ViewModel → View**. No exceptions.
 
 ### SwiftData
 - `@Model` on all persistent classes
-- `ModelContainer(for: [Habit.self, SpinResult.self])` in `RoleoApp.swift`
+- `ModelContainer(for: [Habit.self, SpinResult.self, FreezeDay.self])` in `RoleoApp.swift`
 - `@Query(sort: \Habit.sortOrder)` for habit lists
 - `#Predicate<SpinResult>` for filtered queries
 - Always explicit `try modelContext.save()` — never rely on autosave
@@ -588,6 +587,25 @@ struct UserStats: Equatable {
     static let empty = UserStats(currentStreak: 0, longestStreak: 0,
                                   totalCompleted: 0, totalPoints: 0, completionRate: 0.0)
 }
+
+// Core/Models/FreezeDay.swift
+import SwiftData
+import Foundation
+
+@Model
+final class FreezeDay {
+    var id: UUID
+    var date: Date            // Always startOfDay normalized
+    var createdAt: Date
+    var weekIdentifier: String
+
+    init(date: Date, weekIdentifier: String) {
+        self.id = UUID()
+        self.date = Calendar.current.startOfDay(for: date)
+        self.createdAt = Date()
+        self.weekIdentifier = weekIdentifier
+    }
+}
 ```
 
 ---
@@ -621,19 +639,38 @@ func seedDefaultHabitsIfNeeded(context: ModelContext) {
 ## Streak calculation — exact logic
 
 ```swift
-func calculateStats(from results: [SpinResult]) -> UserStats {
-    let completed = results.filter { $0.isCompleted }
-    let sortedDays = results.map { $0.date }.sorted(by: >)
+func calculateStats(from results: [SpinResult], freezeDays: [FreezeDay] = []) -> UserStats {
+    let calendar = Calendar.current
+    let completed = results.filter(\.isCompleted)
+    let completedDays = Set(completed.map { calendar.startOfDay(for: $0.date) })
+    let frozenDays = Set(freezeDays.map { calendar.startOfDay(for: $0.date) })
+    let activeDays = completedDays.union(frozenDays)
+
+    guard !results.isEmpty else { return .empty }
 
     var streak = 0
-    var checkDate = Calendar.current.startOfDay(for: Date())
-    for day in sortedDays {
-        if Calendar.current.isDate(day, inSameDayAs: checkDate) {
-            if completed.contains(where: { Calendar.current.isDate($0.date, inSameDayAs: day) }) {
-                streak += 1
-                checkDate = Calendar.current.date(byAdding: .day, value: -1, to: checkDate)!
-            } else { break }
+    let today = calendar.startOfDay(for: Date())
+    let startDate = activeDays.contains(today)
+        ? today
+        : calendar.date(byAdding: .day, value: -1, to: today)!
+
+    var checkDate = startDate
+    while activeDays.contains(checkDate) {
+        streak += 1
+        guard let previousDay = calendar.date(byAdding: .day, value: -1, to: checkDate) else { break }
+        checkDate = previousDay
+    }
+
+    var longestStreak = 0
+    var currentRun = 0
+    for day in activeDays.sorted(by: <) {
+        let previousDay = calendar.date(byAdding: .day, value: -1, to: day)
+        if let previousDay, activeDays.contains(previousDay) {
+            currentRun += 1
+        } else {
+            currentRun = 1
         }
+        longestStreak = max(longestStreak, currentRun)
     }
 
     var points = completed.count * AppConstants.Points.perCompletion
@@ -641,9 +678,13 @@ func calculateStats(from results: [SpinResult]) -> UserStats {
     if streak >= 30  { points += AppConstants.Points.streakBonus30 }
     if streak >= 100 { points += AppConstants.Points.streakBonus100 }
 
-    return UserStats(currentStreak: streak, longestStreak: streak,
-                     totalCompleted: completed.count, totalPoints: points,
-                     completionRate: results.isEmpty ? 0 : Double(completed.count) / Double(results.count))
+    return UserStats(
+        currentStreak: streak,
+        longestStreak: longestStreak,
+        totalCompleted: completed.count,
+        totalPoints: points,
+        completionRate: results.isEmpty ? 0 : Double(completed.count) / Double(results.count)
+    )
 }
 ```
 
@@ -656,9 +697,8 @@ import Foundation
 
 enum AppConstants {
     enum Store {
-        static let monthlyProductID = "com.seunome.roleo.premium.monthly"
-        static let annualProductID  = "com.seunome.roleo.premium.annual"
-        static let allProductIDs    = [monthlyProductID, annualProductID]
+        static let lifetimeProductID = "com.seunome.roleo.premium.lifetime"
+        static let allProductIDs     = [lifetimeProductID]
     }
 
     enum AppGroup {
@@ -743,7 +783,7 @@ struct RoleoApp: App {
         WindowGroup {
             ContentView()
                 .environment(storeService)
-                .modelContainer(for: [Habit.self, SpinResult.self])
+                .modelContainer(for: [Habit.self, SpinResult.self, FreezeDay.self])
                 .task {
                     await storeService.loadProducts()
                     await storeService.checkEntitlements()
@@ -788,11 +828,13 @@ Roleo/                              ← project root
 │   └── Core/
 │       ├── Models/
 │       │   ├── Habit.swift
+│       │   ├── FreezeDay.swift
 │       │   ├── SpinResult.swift
 │       │   └── UserStats.swift
 │       ├── Services/
+│       │   ├── NotificationService.swift
 │       │   ├── StoreService.swift
-│       │   └── NotificationService.swift
+│       │   └── StreakFreezeService.swift
 │       ├── Extensions/
 │       │   ├── Color+Hex.swift
 │       │   ├── Date+Extensions.swift

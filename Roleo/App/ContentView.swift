@@ -26,10 +26,14 @@ struct ContentView: View {
     }
 
     @Environment(StoreService.self) private var storeService
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.modelContext) private var modelContext
+    @Query(sort: \SpinResult.date, order: .reverse) private var results: [SpinResult]
+    @Query(sort: \FreezeDay.date, order: .reverse) private var freezeDays: [FreezeDay]
     @AppStorage(AppConstants.UserDefaultsKeys.hasCompletedOnboarding) private var hasCompletedOnboarding = false
     @State private var selectedTab: Tab = .spin
     @State private var hideTabBar = false
+    @State private var freezeToast: FreezeDay?
 
     /// Shared spring used by both the page slide and the tab bar pill so the two
     /// motions feel like a single coordinated gesture.
@@ -50,6 +54,24 @@ struct ContentView: View {
                 .animation(Self.pageSpring, value: selectedTab)
             }
             .clipped()
+
+            if let freezeToast {
+                VStack {
+                    MascotNudge(
+                        message: "Roleo saved your rhythm for \(freezeToast.date.formatted(style: .medium)).",
+                        eyebrow: "STREAK FREEZE",
+                        expression: .happy,
+                        accent: Color(hex: AppConstants.Colors.secondaryTeal),
+                        active: true,
+                        compact: true
+                    )
+                    .padding(.horizontal, 20)
+                    .padding(.top, 18)
+                    Spacer()
+                }
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .allowsHitTesting(false)
+            }
         }
         .warmBackground()
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -66,6 +88,13 @@ struct ContentView: View {
         .onAppear {
             seedDefaultHabitsIfNeeded(context: modelContext)
         }
+        .task {
+            await runRetentionMaintenance()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            Task { await runRetentionMaintenance() }
+        }
         .fullScreenCover(isPresented: onboardingBinding) {
             OnboardingView()
         }
@@ -74,13 +103,70 @@ struct ContentView: View {
         }
     }
 
+    @MainActor
+    private func runRetentionMaintenance() async {
+        if let freeze = StreakFreezeService.autoApplyIfNeeded(
+            results: results,
+            freezeDays: freezeDays,
+            context: modelContext
+        ) {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.78)) {
+                freezeToast = freeze
+            }
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(2.4))
+                if freezeToast?.id == freeze.id {
+                    withAnimation(.easeOut(duration: 0.25)) {
+                        freezeToast = nil
+                    }
+                }
+            }
+        }
+
+        await rescheduleNotificationsIfNeeded()
+    }
+
+    @MainActor
+    private func rescheduleNotificationsIfNeeded() async {
+        let defaults = UserDefaults.standard
+        guard defaults.bool(forKey: AppConstants.UserDefaultsKeys.notificationsEnabled) else {
+            return
+        }
+
+        let service = NotificationService()
+        let status = await service.authorizationStatus()
+        guard status == .authorized || status == .provisional || status == .ephemeral else {
+            return
+        }
+
+        let hour = defaults.integer(forKey: AppConstants.UserDefaultsKeys.notificationHour)
+        let minute = defaults.integer(forKey: AppConstants.UserDefaultsKeys.notificationMinute)
+        service.scheduleDailyNotification(hour: hour, minute: minute)
+        service.scheduleWeeklyDigest(completedThisWeek: completedCountForWeeklyDigest())
+    }
+
+    private func completedCountForWeeklyDigest(now: Date = Date()) -> Int {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: now)
+        guard let start = calendar.date(byAdding: .day, value: -7, to: today) else {
+            return 0
+        }
+
+        return results.reduce(into: 0) { count, result in
+            let day = calendar.startOfDay(for: result.date)
+            if result.isCompleted, day >= start, day < today {
+                count += 1
+            }
+        }
+    }
+
     @ViewBuilder
     private func viewForTab(_ tab: Tab) -> some View {
         switch tab {
-        case .spin:     SpinView()
-        case .habits:   HabitsView()
-        case .history:  HistoryView()
-        case .settings: SettingsView()
+        case .spin:     SpinView(isActive: selectedTab == .spin)
+        case .habits:   HabitsView(isActive: selectedTab == .habits)
+        case .history:  HistoryView(isActive: selectedTab == .history)
+        case .settings: SettingsView(isActive: selectedTab == .settings)
         }
     }
 
@@ -97,7 +183,7 @@ struct ContentView: View {
 
     private var paywallBinding: Binding<Bool> {
         Binding(
-            get: { hasCompletedOnboarding && !storeService.isSubscribed && !storeService.isInTrial },
+            get: { hasCompletedOnboarding && !storeService.isUnlocked && !storeService.isInTrial },
             set: { _ in }
         )
     }
@@ -304,5 +390,5 @@ func seedDefaultHabitsIfNeeded(context: ModelContext) {
 #Preview {
     ContentView()
         .environment(StoreService())
-        .modelContainer(for: [Habit.self, SpinResult.self], inMemory: true)
+        .modelContainer(for: [Habit.self, SpinResult.self, FreezeDay.self], inMemory: true)
 }

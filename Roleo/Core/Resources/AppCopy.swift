@@ -57,6 +57,18 @@ enum AppCopy {
         static let restoreFailed = "Couldn't reach the store. Mind trying again?"
     }
 
+    enum Mascot {
+        static let habitFormEmpty = "Pick something small. I'll cheer when it lands."
+        static let habitFormReady = "This one feels ready for the wheel."
+        static let habitFormDuplicate = "I already know one like that. Give this habit its own little name."
+
+        static func reminderNudge(enabled: Bool) -> String {
+            enabled
+                ? "I'll tap your shoulder once a day, then get out of the way."
+                : "Want a tiny daily nudge? I can help you remember the ritual."
+        }
+    }
+
     enum Habits {
         static let readyLabel = "Ready to spin"
         static let restingLabel = "Resting"
@@ -136,7 +148,7 @@ enum AppCopy {
     enum Paywall {
         static let heroTitle = "Roleo Premium"
         static let heroSubtitle = "Keep your daily wheel, streak, and progress ritual going."
-        static let ctaPrimary = "Start free trial"
-        static let trialHint = "3 days free, cancel anytime"
+        static let ctaPrimary = "Unlock forever"
+        static let trialHint = "3 days free, then one simple unlock"
     }
 }

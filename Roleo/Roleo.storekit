@@ -4,7 +4,21 @@
 
   ],
   "products" : [
-
+    {
+      "displayPrice" : "4.99",
+      "familyShareable" : false,
+      "internalID" : "E1A7D2E1-3001-4A11-AA01-000000000003",
+      "localizations" : [
+        {
+          "description" : "Unlock Roleo forever with a one-time purchase.",
+          "displayName" : "Roleo Lifetime",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.seunome.roleo.premium.lifetime",
+      "referenceName" : "Roleo Lifetime",
+      "type" : "NonConsumable"
+    }
   ],
   "settings" : {
     "_applicationInternalID" : "0000000000",
@@ -62,77 +76,7 @@
     ]
   },
   "subscriptionGroups" : [
-    {
-      "id" : "D1A7D2E1-2001-4A11-AA01-000000000001",
-      "localizations" : [
-        {
-          "description" : "Roleo Premium",
-          "displayName" : "Roleo Premium",
-          "locale" : "en_US"
-        }
-      ],
-      "name" : "Roleo Premium",
-      "subscriptions" : [
-        {
-          "adHocOffers" : [
 
-          ],
-          "codeOffers" : [
-
-          ],
-          "displayPrice" : "4.99",
-          "familyShareable" : false,
-          "groupNumber" : 1,
-          "internalID" : "E1A7D2E1-3001-4A11-AA01-000000000001",
-          "introductoryOffer" : {
-            "internalID" : "F1A7D2E1-4001-4A11-AA01-000000000001",
-            "paymentMode" : "free",
-            "subscriptionPeriod" : "P3D"
-          },
-          "localizations" : [
-            {
-              "description" : "Unlock Roleo Premium with monthly billing.",
-              "displayName" : "Premium Monthly",
-              "locale" : "en_US"
-            }
-          ],
-          "productID" : "com.seunome.roleo.premium.monthly",
-          "recurringSubscriptionPeriod" : "P1M",
-          "referenceName" : "Premium Monthly",
-          "subscriptionGroupID" : "D1A7D2E1-2001-4A11-AA01-000000000001",
-          "type" : "RecurringSubscription"
-        },
-        {
-          "adHocOffers" : [
-
-          ],
-          "codeOffers" : [
-
-          ],
-          "displayPrice" : "29.99",
-          "familyShareable" : false,
-          "groupNumber" : 1,
-          "internalID" : "E1A7D2E1-3001-4A11-AA01-000000000002",
-          "introductoryOffer" : {
-            "internalID" : "F1A7D2E1-4001-4A11-AA01-000000000002",
-            "paymentMode" : "free",
-            "subscriptionPeriod" : "P3D"
-          },
-          "localizations" : [
-            {
-              "description" : "Unlock Roleo Premium with annual billing. Save 50%.",
-              "displayName" : "Premium Annual",
-              "locale" : "en_US"
-            }
-          ],
-          "productID" : "com.seunome.roleo.premium.annual",
-          "recurringSubscriptionPeriod" : "P1Y",
-          "referenceName" : "Premium Annual",
-          "subscriptionGroupID" : "D1A7D2E1-2001-4A11-AA01-000000000001",
-          "type" : "RecurringSubscription"
-        }
-      ]
-    }
   ],
   "version" : {
     "major" : 4,

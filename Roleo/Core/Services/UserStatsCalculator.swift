@@ -3,22 +3,31 @@ import Foundation
 /// Shared stats calculator for streaks, completion totals, points, and rates.
 /// Keeping this in Core prevents Spin and History from drifting apart.
 enum UserStatsCalculator {
-    static func calculate(from results: [SpinResult], calendar: Calendar = .current, now: Date = Date()) -> UserStats {
+    static func calculate(
+        from results: [SpinResult],
+        freezeDays: [FreezeDay] = [],
+        calendar: Calendar = .current,
+        now: Date = Date()
+    ) -> UserStats {
         guard !results.isEmpty else { return .empty }
 
         let completed = results.filter(\.isCompleted)
-        let completedDays: Set<Date> = Set(
+        let completedDays = Set(
             completed.map { calendar.startOfDay(for: $0.date) }
         )
+        let frozenDays = Set(
+            freezeDays.map { calendar.startOfDay(for: $0.date) }
+        )
+        let activeDays = completedDays.union(frozenDays)
 
         let currentStreak = calculateCurrentStreak(
-            completedDays: completedDays,
+            activeDays: activeDays,
             calendar: calendar,
             now: now
         )
 
         let longestStreak = calculateLongestStreak(
-            completedDays: completedDays,
+            activeDays: activeDays,
             calendar: calendar
         )
 
@@ -37,14 +46,19 @@ enum UserStatsCalculator {
     }
 
     private static func calculateCurrentStreak(
-        completedDays: Set<Date>,
+        activeDays: Set<Date>,
         calendar: Calendar,
         now: Date
     ) -> Int {
         var streak = 0
         var checkDate = calendar.startOfDay(for: now)
 
-        while completedDays.contains(checkDate) {
+        if !activeDays.contains(checkDate),
+           let previous = calendar.date(byAdding: .day, value: -1, to: checkDate) {
+            checkDate = previous
+        }
+
+        while activeDays.contains(checkDate) {
             streak += 1
             guard let previous = calendar.date(byAdding: .day, value: -1, to: checkDate) else {
                 break
@@ -55,12 +69,12 @@ enum UserStatsCalculator {
         return streak
     }
 
-    private static func calculateLongestStreak(completedDays: Set<Date>, calendar: Calendar) -> Int {
+    private static func calculateLongestStreak(activeDays: Set<Date>, calendar: Calendar) -> Int {
         var longestStreak = 0
         var runningStreak = 0
         var previousDay: Date?
 
-        for day in completedDays.sorted() {
+        for day in activeDays.sorted() {
             if let previousDay,
                let expected = calendar.date(byAdding: .day, value: 1, to: previousDay),
                calendar.isDate(day, inSameDayAs: expected) {

@@ -56,6 +56,7 @@ struct HabitFormView: View {
             ScrollView {
                 VStack(spacing: 18) {
                     nameField
+                    mascotCoach
                     if isDuplicate { duplicateHint }
                     iconPicker
                     colorPicker
@@ -86,6 +87,28 @@ struct HabitFormView: View {
                 isNameFocused = true
             }
         }
+    }
+
+    private var mascotCoach: some View {
+        MascotNudge(
+            message: mascotCoachMessage,
+            eyebrow: habitToEdit == nil ? "ROLEO SAYS" : "ROLEO CHECKS IN",
+            expression: mascotCoachExpression,
+            accent: Color(hex: canSave ? colorHex : AppConstants.Colors.primaryOrange)
+        )
+        .animation(.spring(response: 0.4, dampingFraction: 0.78), value: mascotCoachMessage)
+    }
+
+    private var mascotCoachMessage: String {
+        if isDuplicate { return AppCopy.Mascot.habitFormDuplicate }
+        if canSave { return AppCopy.Mascot.habitFormReady }
+        return AppCopy.Mascot.habitFormEmpty
+    }
+
+    private var mascotCoachExpression: RoleoMascot.Expression {
+        if isDuplicate { return .thinking }
+        if canSave { return .excited }
+        return .curious
     }
 
     private var topBar: some View {
@@ -308,5 +331,5 @@ struct HabitFormView: View {
         habitToEdit: nil,
         onSave: { _, _, _, _ in }
     )
-    .modelContainer(for: [Habit.self, SpinResult.self], inMemory: true)
+    .modelContainer(for: [Habit.self, SpinResult.self, FreezeDay.self], inMemory: true)
 }

@@ -22,13 +22,16 @@ struct RoleoMascot: View {
     /// When true, the mascot breathes (subtle scale loop). Disable for static
     /// previews or when Reduce Motion is on.
     var breathing: Bool = true
+    /// Lets parent screens pause ambient loops while the mascot is offscreen
+    /// but still mounted by the custom tab carousel.
+    var active: Bool = true
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var breathScale: CGFloat = 1.0
     @State private var bounce: CGFloat = 0
 
-    private var shouldBreathe: Bool { breathing && !reduceMotion }
-    private var shouldBounce: Bool { expression == .cheering || expression == .excited }
+    private var shouldBreathe: Bool { active && breathing && !reduceMotion }
+    private var shouldBounce: Bool { active && (expression == .cheering || expression == .excited) }
 
     var body: some View {
         ZStack {
@@ -42,6 +45,7 @@ struct RoleoMascot: View {
         .accessibilityHidden(true)
         .onAppear(perform: startIdleAnimations)
         .onChange(of: expression) { _, _ in startIdleAnimations() }
+        .onChange(of: active) { _, _ in startIdleAnimations() }
     }
 
     // MARK: Body
@@ -203,8 +207,14 @@ struct RoleoMascot: View {
     // MARK: Animations
 
     private func startIdleAnimations() {
-        breathScale = 1.0
-        bounce = 0
+        var instantTransaction = Transaction(animation: nil)
+        instantTransaction.disablesAnimations = true
+        withTransaction(instantTransaction) {
+            breathScale = 1.0
+            bounce = 0
+        }
+
+        guard active && !reduceMotion else { return }
 
         if shouldBreathe {
             withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true)) {

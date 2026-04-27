@@ -36,8 +36,8 @@ final class SpinViewModel {
 
     /// Called from SpinView's result-signature observer and `.onAppear` so the
     /// ViewModel always reflects the latest SwiftData stats source.
-    func updateDerivedStats(results: [SpinResult]) {
-        let stats = UserStatsCalculator.calculate(from: results)
+    func updateDerivedStats(results: [SpinResult], freezeDays: [FreezeDay] = []) {
+        let stats = UserStatsCalculator.calculate(from: results, freezeDays: freezeDays)
         currentStreak = stats.currentStreak
         completedTasksCount = stats.totalCompleted
         progression = XPProgressionState.fromCompletedTasks(completedTasksCount)

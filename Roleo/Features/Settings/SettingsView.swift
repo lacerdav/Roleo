@@ -1,7 +1,7 @@
 import SwiftUI
+import SwiftData
 import UIKit
 import UserNotifications
-import StoreKit
 
 /// Phase 5 settings screen:
 /// - **Reminders**: opt-in daily push with time picker. Requests permission on
@@ -14,6 +14,9 @@ import StoreKit
 struct SettingsView: View {
     @Environment(StoreService.self) private var storeService
     @Environment(\.scenePhase) private var scenePhase
+    @Query(sort: \SpinResult.date, order: .reverse) private var results: [SpinResult]
+
+    var isActive = true
 
     @AppStorage(AppConstants.UserDefaultsKeys.notificationsEnabled)
     private var notificationsEnabled = false
@@ -32,7 +35,6 @@ struct SettingsView: View {
     @State private var showDeniedAlert = false
     @State private var restoreMessage: String?
     @State private var isPaywallPresented = false
-    @State private var isManagingSubscription = false
 
     private let notifications = NotificationService()
 
@@ -66,7 +68,6 @@ struct SettingsView: View {
             PaywallView(onClose: { isPaywallPresented = false })
                 .environment(storeService)
         }
-        .manageSubscriptionsSheet(isPresented: $isManagingSubscription)
     }
 
     private var restoreMessageBinding: Binding<Bool> {
@@ -119,6 +120,17 @@ struct SettingsView: View {
 
     private var remindersSection: some View {
         Section {
+            MascotNudge(
+                message: AppCopy.Mascot.reminderNudge(enabled: notificationsEnabled),
+                eyebrow: "ROLEO REMINDER",
+                expression: notificationsEnabled ? .happy : .curious,
+                accent: Color(hex: notificationsEnabled ? AppConstants.Colors.secondaryTeal : AppConstants.Colors.primaryOrange),
+                active: isActive,
+                compact: true
+            )
+            .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 8, trailing: 0))
+            .listRowBackground(Color.clear)
+
             Toggle(isOn: toggleBinding) {
                 Label {
                     Text("Daily reminder")
@@ -170,7 +182,7 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - Subscription
+    // MARK: - Access
 
     private var subscriptionSection: some View {
         Section {
@@ -188,19 +200,7 @@ struct SettingsView: View {
                     .foregroundStyle(subscriptionTint)
             }
 
-            if storeService.isSubscribed {
-                Button {
-                    isManagingSubscription = true
-                } label: {
-                    Label {
-                        Text("Manage Subscription")
-                            .foregroundStyle(Color(hex: AppConstants.Colors.textPrimary))
-                    } icon: {
-                        Image(systemName: "creditcard.fill")
-                            .foregroundStyle(Color(hex: AppConstants.Colors.primaryOrange))
-                    }
-                }
-            } else {
+            if !storeService.isUnlocked {
                 Button {
                     isPaywallPresented = true
                 } label: {
@@ -233,15 +233,19 @@ struct SettingsView: View {
             }
             .disabled(isRestoring)
         } header: {
-            sectionHeader("Subscription")
+            sectionHeader("Access")
         } footer: {
-            if !storeService.isSubscribed && storeService.isInTrial {
+            if !storeService.isUnlocked && storeService.isInTrial {
                 let remaining = storeService.trialRemaining()
                 Text("^[\(remaining) day](inflect: true) left in your free trial.")
                     .font(.system(.caption, design: .rounded))
                     .foregroundStyle(Color(hex: AppConstants.Colors.textSecondary))
-            } else if !storeService.isSubscribed && !storeService.isInTrial {
-                Text("Your free trial has ended. Subscribe to keep your streak going.")
+            } else if !storeService.isUnlocked && !storeService.isInTrial {
+                Text("Your free trial has ended. Unlock Roleo once to keep your streak going.")
+                    .font(.system(.caption, design: .rounded))
+                    .foregroundStyle(Color(hex: AppConstants.Colors.textSecondary))
+            } else if storeService.isUnlocked {
+                Text("Your one-time unlock is active on this Apple ID.")
                     .font(.system(.caption, design: .rounded))
                     .foregroundStyle(Color(hex: AppConstants.Colors.textSecondary))
             }
@@ -249,23 +253,23 @@ struct SettingsView: View {
     }
 
     private var upgradeCTATitle: String {
-        storeService.isInTrial ? "Upgrade to Premium" : "Get Premium"
+        storeService.isInTrial ? "Unlock Forever" : "Get Lifetime Access"
     }
 
     private var subscriptionStatusText: String {
-        if storeService.isSubscribed { return "Premium" }
+        if storeService.isUnlocked { return "Lifetime unlocked" }
         if storeService.isInTrial { return "Free Trial" }
         return "Trial ended"
     }
 
     private var subscriptionIcon: String {
-        if storeService.isSubscribed { return "crown.fill" }
+        if storeService.isUnlocked { return "crown.fill" }
         if storeService.isInTrial { return "sparkles" }
         return "exclamationmark.circle.fill"
     }
 
     private var subscriptionTint: Color {
-        if storeService.isSubscribed {
+        if storeService.isUnlocked {
             return Color(hex: AppConstants.Colors.goldBright)
         }
         if storeService.isInTrial {
@@ -459,6 +463,7 @@ struct SettingsView: View {
                     hour: notificationHour,
                     minute: notificationMinute
                 )
+                notifications.scheduleWeeklyDigest(completedThisWeek: completedCountForWeeklyDigest())
             }
         case .denied:
             notificationsEnabled = false
@@ -469,6 +474,7 @@ struct SettingsView: View {
                 hour: notificationHour,
                 minute: notificationMinute
             )
+            notifications.scheduleWeeklyDigest(completedThisWeek: completedCountForWeeklyDigest())
         @unknown default:
             notificationsEnabled = false
         }
@@ -480,6 +486,7 @@ struct SettingsView: View {
             hour: notificationHour,
             minute: notificationMinute
         )
+        notifications.scheduleWeeklyDigest(completedThisWeek: completedCountForWeeklyDigest())
     }
 
     private func refreshAuthorizationStatus() async {
@@ -499,14 +506,29 @@ struct SettingsView: View {
         isRestoring = true
         await storeService.restorePurchases()
         isRestoring = false
-        restoreMessage = storeService.isSubscribed
-            ? "Welcome back — your subscription is active."
-            : "Couldn't find an active subscription on this Apple ID."
+        restoreMessage = storeService.isUnlocked
+            ? "Welcome back — Roleo is unlocked."
+            : "Couldn't find a lifetime unlock on this Apple ID."
     }
 
     private func openSystemSettings() {
         guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
         UIApplication.shared.open(url)
+    }
+
+    private func completedCountForWeeklyDigest(now: Date = Date()) -> Int {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: now)
+        guard let start = calendar.date(byAdding: .day, value: -7, to: today) else {
+            return 0
+        }
+
+        return results.reduce(into: 0) { count, result in
+            let day = calendar.startOfDay(for: result.date)
+            if result.isCompleted, day >= start, day < today {
+                count += 1
+            }
+        }
     }
 }
 

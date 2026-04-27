@@ -7,6 +7,11 @@ import Observation
 @Observable
 @MainActor
 final class HistoryViewModel {
+    private static let monthFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "LLLL yyyy"
+        return formatter
+    }()
 
     // MARK: - Stats
 
@@ -15,8 +20,8 @@ final class HistoryViewModel {
     /// Longest-streak is a separate single-pass calculation so we can show a useful
     /// "all-time record" stat card (the spec's inline implementation reused `streak`
     /// for both, which is a bug we patch here without changing the public `UserStats`).
-    func calculateStats(from results: [SpinResult]) -> UserStats {
-        UserStatsCalculator.calculate(from: results)
+    func calculateStats(from results: [SpinResult], freezeDays: [FreezeDay]) -> UserStats {
+        UserStatsCalculator.calculate(from: results, freezeDays: freezeDays)
     }
 
     // MARK: - Grouping
@@ -27,8 +32,6 @@ final class HistoryViewModel {
         guard !results.isEmpty else { return [] }
 
         let calendar = Calendar.current
-        let formatter = DateFormatter()
-        formatter.dateFormat = "LLLL yyyy"
 
         let groups = Dictionary(grouping: results) { result -> Date in
             let components = calendar.dateComponents([.year, .month], from: result.date)
@@ -38,7 +41,7 @@ final class HistoryViewModel {
         return groups
             .sorted { $0.key > $1.key }
             .map { (monthStart, results) in
-                let label = formatter.string(from: monthStart).capitalized
+                let label = Self.monthFormatter.string(from: monthStart).capitalized
                 let sortedResults = results.sorted { $0.date > $1.date }
                 return (label, sortedResults)
             }

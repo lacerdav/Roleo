@@ -10,6 +10,8 @@ struct CalendarGridView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let results: [SpinResult]
+    let freezeDays: [FreezeDay]
+    var isActive = true
 
     @State private var selectedDay: DayEntry?
     @State private var appeared = false
@@ -32,6 +34,7 @@ struct CalendarGridView: View {
     struct DayEntry: Identifiable, Hashable {
         enum Status: Hashable {
             case completed
+            case frozen
             case missed
             case noSpin
             case future
@@ -70,6 +73,9 @@ struct CalendarGridView: View {
             let day = calendar.startOfDay(for: result.date)
             byDay[day] = result
         }
+        let frozenByDay = Set(
+            freezeDays.map { calendar.startOfDay(for: $0.date) }
+        )
 
         return (0..<35).compactMap { offset -> DayEntry? in
             guard let date = calendar.date(byAdding: .day, value: offset, to: start) else {
@@ -88,6 +94,8 @@ struct CalendarGridView: View {
                     status: result.isCompleted ? .completed : .missed,
                     habitName: result.habitName
                 )
+            } else if frozenByDay.contains(day) {
+                return DayEntry(id: day, date: day, status: .frozen, habitName: nil)
             } else {
                 return DayEntry(id: day, date: day, status: .noSpin, habitName: nil)
             }
@@ -144,7 +152,8 @@ struct CalendarGridView: View {
                     )
                 }
             }
-            .onAppear { appeared = true }
+            .onAppear { revealIfNeeded() }
+            .onChange(of: isActive) { _, _ in revealIfNeeded() }
         }
     }
 
@@ -160,6 +169,12 @@ struct CalendarGridView: View {
                 Image(systemName: "checkmark")
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(.white)
+            case .frozen:
+                Circle()
+                    .fill(Color(hex: AppConstants.Colors.secondarySoft))
+                Image(systemName: "snowflake")
+                    .font(.system(size: 11, weight: .black))
+                    .foregroundStyle(Color(hex: AppConstants.Colors.secondaryTeal))
             case .missed:
                 Circle()
                     .stroke(Color(hex: AppConstants.Colors.coral).opacity(0.55), lineWidth: 1.2)
@@ -182,9 +197,7 @@ struct CalendarGridView: View {
         }
         .frame(width: cellSize, height: cellSize)
         .shadow(
-            color: entry.status == .completed
-                ? Color(hex: AppConstants.Colors.successGreen).opacity(0.30)
-                : .clear,
+            color: shadowColor(for: entry.status),
             radius: 5, x: 0, y: 2
         )
         .accessibilityLabel(accessibilityLabel(for: entry))
@@ -213,6 +226,10 @@ struct CalendarGridView: View {
                 Text(entry.habitName.map { "\($0) — completed" } ?? "Completed")
                     .font(.system(.footnote, design: .rounded))
                     .foregroundStyle(Color(hex: AppConstants.Colors.successGreen))
+            case .frozen:
+                Text("Streak freeze used")
+                    .font(.system(.footnote, design: .rounded))
+                    .foregroundStyle(Color(hex: AppConstants.Colors.secondaryTeal))
             case .missed:
                 Text(entry.habitName.map { "\($0) — not done" } ?? "Spun but not completed")
                     .font(.system(.footnote, design: .rounded))
@@ -234,15 +251,32 @@ struct CalendarGridView: View {
         let date = entry.date.formatted(.dateTime.month().day())
         switch entry.status {
         case .completed: return "\(date), completed"
+        case .frozen:    return "\(date), streak freeze"
         case .missed:    return "\(date), missed"
         case .noSpin:    return "\(date), no spin"
         case .future:    return ""
         }
     }
+
+    private func shadowColor(for status: DayEntry.Status) -> Color {
+        switch status {
+        case .completed:
+            return Color(hex: AppConstants.Colors.successGreen).opacity(0.30)
+        case .frozen:
+            return Color(hex: AppConstants.Colors.secondaryTeal).opacity(0.18)
+        case .missed, .noSpin, .future:
+            return .clear
+        }
+    }
+
+    private func revealIfNeeded() {
+        guard isActive, !appeared else { return }
+        appeared = true
+    }
 }
 
 #Preview {
-    CalendarGridView(results: [])
+    CalendarGridView(results: [], freezeDays: [])
         .padding()
         .background(Color(hex: AppConstants.Colors.backgroundTop))
 }
